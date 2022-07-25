@@ -1,4 +1,4 @@
-// Copyright (C)2021 - Eduard Heidt
+// Copyright (C)2022 - Eduard Heidt
 //
 // Author: Eduard Heidt (eh2k@gmx.de)
 //
@@ -24,45 +24,49 @@
 //
 
 #include "machine.h"
+#include "misc/noise.hxx"
 
-#undef MACHINE_INIT
-#define MACHINE_INIT(init_fun) \
-    extern void init_fun();    \
-    init_fun();
+using namespace machine;
 
-int main()
+struct NoiseEngine : public Engine
 {
-    MACHINE_INIT(init_voltage);
-    MACHINE_INIT(init_noise);
-    MACHINE_INIT(init_midi_monitor);
-    MACHINE_INIT(init_midi_clock);
-    MACHINE_INIT(init_quantizer);
-    MACHINE_INIT(init_peaks);
-    MACHINE_INIT(init_braids);
-    MACHINE_INIT(init_plaits);
-    MACHINE_INIT(init_sample_roms);
-    MACHINE_INIT(init_clap);
-    MACHINE_INIT(init_reverb);
-    MACHINE_INIT(init_reverbSC);
-    MACHINE_INIT(init_faust);
-    MACHINE_INIT(init_rings);
-    MACHINE_INIT(init_speech);
-    MACHINE_INIT(init_sam);
-    MACHINE_INIT(init_delay);
-    MACHINE_INIT(init_modulations);
-    MACHINE_INIT(init_fv1);
-    MACHINE_INIT(init_midi_polyVA);
-    MACHINE_INIT(init_acid_sequencer);
-    MACHINE_INIT(init_trig_sequencer);
-    MACHINE_INIT(init_fft);
+    const char *modes[2] = {">White", ">Pink"};
+    PinkNoise<> pink;
+    float gain;
+    uint8_t mode;
 
-    //MACHINE_INIT(init_open303);
-    //MACHINE_INIT(init_padsynth);
+    NoiseEngine() : Engine(0)
+    {
+        param[0].init("Level", &gain, 1);
+        param[1].init(">Type", &mode, 0, 0, LEN_OF(modes) - 1);
+    };
 
-    machine::setup("0.0m", 0);
+    float buffer[machine::FRAME_BUFFER_SIZE];
 
-    while (true)
-        machine::loop();
+    void process(const ControlFrame &frame, OutputFrame &of) override
+    {
+        for (int i = 0; i < FRAME_BUFFER_SIZE; i++)
+        {
+            if (mode == 0)
+                buffer[i] = pink.white.nextf(-1.f, 1.f) * gain;
+            else
+                buffer[i] = pink.nextf(-1.f, 1.f) * gain;
+        }
 
-    return 0;
+        of.push(buffer, machine::FRAME_BUFFER_SIZE);
+    }
+
+    void onDisplay(uint8_t *display) override
+    {
+        param[1].name = modes[mode];
+
+        gfx::drawEngine(display, this);
+    }
+};
+
+void init_noise()
+{
+    machine::add<NoiseEngine>(CV, "Noise");
 }
+
+MACHINE_INIT(init_noise);
